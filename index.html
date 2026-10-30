@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TTDbuy | Customer Service</title>
     <meta name="theme-color" content="#141412">
-    <meta name="ttdbuy-build" content="2026-10-30-ui-v1">
+    <meta name="ttdbuy-build" content="2026-10-30-ui-v1.1">
     <!--
     TTDbuy 黑灰 / 香槟金主题；基于用户提供的原始客服页。
     仅调整 UI、品牌文案、图标及响应式样式，原业务脚本保持原有行为。
-    客服池、兜底号码、24 小时分配锁、11 种语言、utm_campaign/ref 来源读取均沿用原版。
+    客服池已更新为 TTDbuy 的 12 个号码，首个号码同时用于静态默认与故障兜底。
+    24 小时分配锁、11 种语言、utm_campaign/ref 来源读取均沿用原版。
     原 GA4 ID G-S4WGCJL24J 也保留；若 TTDbuy 使用独立统计，请替换下面两处 ID。
     品牌图片已内嵌在此 HTML 中；外观不依赖额外图片、图标库或字体文件。
     部署时将本文件命名为 index.html。没有预设或虚构 TTDbuy 的导航页地址。
@@ -271,13 +272,13 @@
             </div>
             
             <div class="number-display">
-                <div class="number-block"><span class="number-caption">WHATSAPP</span><span class="number" id="whatsappNumber">+86 18206011048</span></div>
+                <div class="number-block"><span class="number-caption">WHATSAPP</span><span class="number" id="whatsappNumber">+86 13859520521</span></div>
                 <button class="copy-btn" id="copyBtn">
                     <i class="fas fa-copy" aria-hidden="true"></i> <span id="copyText">Copy Number</span>
                 </button>
             </div>
             
-            <a href="https://wa.me/8618206011048" class="whatsapp-btn" id="whatsappLink" target="_blank" rel="noopener noreferrer">
+            <a href="https://wa.me/8613859520521" class="whatsapp-btn" id="whatsappLink" target="_blank" rel="noopener noreferrer">
                 <i class="fab fa-whatsapp" aria-hidden="true"></i> <span id="contactText">Contact Now</span>
             </a>
             
@@ -314,16 +315,25 @@
         // 客服号码池：只保留正在使用的号码。每个号码的 agentId 必须唯一。
         // ⚠ 更换第一位备用客服时，请同时更新上面的静态 HTML 号码和 href。
         const whatsappData = [
-           { number: "+86 18206011048", link: "https://wa.me/8618206011048", agentId: "agent-01" },
-           { number: "+86 13646032517", link: "https://wa.me/8613646032517", agentId: "agent-02" },
-           { number: "+86 17506065067", link: "https://wa.me/8617506065067", agentId: "agent-03" },
+            { number: "+86 13859520521", link: "https://wa.me/8613859520521", agentId: "agent-01" },
+            { number: "+86 13225077853", link: "https://wa.me/8613225077853", agentId: "agent-02" },
+            { number: "+86 13225071785", link: "https://wa.me/8613225071785", agentId: "agent-03" },
+            { number: "+86 13215947237", link: "https://wa.me/8613215947237", agentId: "agent-04" },
+            { number: "+86 13626039525", link: "https://wa.me/8613626039525", agentId: "agent-05" },
+            { number: "+86 18006975524", link: "https://wa.me/8618006975524", agentId: "agent-06" },
+            { number: "+86 17689390910", link: "https://wa.me/8617689390910", agentId: "agent-07" },
+            { number: "+86 13275021998", link: "https://wa.me/8613275021998", agentId: "agent-08" },
+            { number: "+86 15805932843", link: "https://wa.me/8615805932843", agentId: "agent-09" },
+            { number: "+86 18965178078", link: "https://wa.me/8618965178078", agentId: "agent-10" },
+            { number: "+86 18559770323", link: "https://wa.me/8618559770323", agentId: "agent-11" },
+            { number: "+86 15710694305", link: "https://wa.me/8615710694305", agentId: "agent-12" },
         ];
 
         // 最后一道故障兜底。即使号码池误删为空，也能跳转到现有的备用客服。
         // 注意：静态 HTML 的备用号码应当始终与这里一致。
         const STATIC_FALLBACK_AGENT = {
-            number: "+86 18206011048",
-            link: "https://wa.me/8618206011048",
+            number: "+86 13859520521",
+            link: "https://wa.me/8613859520521",
             agentId: "agent-01"
         };
 
