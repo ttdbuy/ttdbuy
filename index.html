@@ -5,15 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TTDbuy | Customer Service</title>
     <meta name="theme-color" content="#141412">
-    <meta name="ttdbuy-build" content="2026-10-30-ui-v1.1">
+    <meta name="ttdbuy-build" content="2026-10-31-source-v2.2">
     <!--
     TTDbuy 黑灰 / 香槟金主题；基于用户提供的原始客服页。
-    仅调整 UI、品牌文案、图标及响应式样式，原业务脚本保持原有行为。
+    来源增强版 2026-10-31-source-v2.2；保留黑金 UI 与原客服分配功能。
     客服池已更新为 TTDbuy 的 12 个号码，首个号码同时用于静态默认与故障兜底。
-    24 小时分配锁、11 种语言、utm_campaign/ref 来源读取均沿用原版。
+    24 小时客服分配锁、11 种语言、复制号码保持原有行为。
+    utm_campaign 在此站专门承载博主编号，支持 yi61、K0381、kol001、lilielisa 等。
+    编号支持 1–64 位英文字母/数字/点/下划线/连字符，首位为字母或数字；不混填活动名。
+    creator_id/ref 优先，其次明确 Content 编号，然后 Campaign；其他普通 UTM 不当成博主。
+    来源使用 TTDbuy 独立的 24 小时缓存；无参回访不续期，不代表已确认的客户首次来源。
+    直达客服测试：https://ttdbuy.netlify.app/?utm_campaign=yi61
+    可选 Linktree 中转：短链目标先设为 https://ttdbuy.netlify.app/?utm_campaign=yi61&via=linktree
+    入口保存来源后自动打开固定的 https://linktr.ee/ttdbuy
+    Linktree 的客服按钮设为 https://ttdbuy.netlify.app/?from=linktree
+    from=linktree 只恢复有效的中转缓存，忽略该回程的 UTM，不再次跳转。
+    只替换 HTML 而仍直接进入 Linktree，不能凭空恢复从未到达本站的来源。
+    缓存依赖同一浏览器和同一站点；换浏览器、清除缓存、到期或多博主标签页可能失去或混淆来源。
+    仅显式 via=linktree 才导航；存储失败或编号无效时停留客服页；普通访问不会自动跳转。
+    debug=1 显示来源调试面板并暂停中转。正式短链不要带 debug=1。
     原 GA4 ID G-S4WGCJL24J 也保留；若 TTDbuy 使用独立统计，请替换下面两处 ID。
     品牌图片已内嵌在此 HTML 中；外观不依赖额外图片、图标库或字体文件。
-    部署时将本文件命名为 index.html。没有预设或虚构 TTDbuy 的导航页地址。
+    部署时将本文件命名为 index.html。
     -->
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-S4WGCJL24J"></script>
@@ -130,6 +143,10 @@
         .whatsapp-btn:hover { filter: brightness(1.075); transform: translateY(-1px); }
         .whatsapp-btn .fa-whatsapp { font-size: 25px; }
         .refresh-info { padding: 0 8px; margin: 18px auto 0; color: #a9a79e; font-size: 11.5px; line-height: 1.75; max-width: 570px; }
+        .source-debug { text-align: left; margin-top: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #171813; color: var(--ink); font-size: 12px; }
+        .source-debug[hidden] { display: none !important; }
+        .source-debug summary { color: var(--gold-light); cursor: pointer; }
+        .source-debug pre { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 10px; font: inherit; line-height: 1.7; }
         .features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 28px; padding-top: 26px; border-top: 1px solid var(--line); }
         .feature { min-width: 0; padding: 16px 13px 17px; border-radius: 13px; border: 1px solid rgba(216, 203, 176, .10); background: rgba(255, 255, 255, .025); }
         .feature > i { display: inline-flex; color: var(--gold); font-size: 25px; margin-bottom: 11px; }
@@ -286,6 +303,11 @@
                 Note: If WhatsApp doesn't open automatically, use an external browser or copy the number to add us
             </p>
             
+            <details id="sourceDebug" class="source-debug" hidden open>
+                <summary>来源调试（仅 debug=1 时显示）</summary>
+                <pre id="sourceDebugText"></pre>
+            </details>
+
             <div class="features">
                 <div class="feature">
                     <i class="fas fa-headset" aria-hidden="true"></i>
@@ -534,6 +556,25 @@
         const ASSIGNMENT_TTL_MS = 24 * 60 * 60 * 1000;
         const LANG_STORAGE_KEY = 'selectedLanguage';
 
+        // 来源与客服分配分别存储；修改来源不会重置客服 24 小时锁。
+        const SOURCE_BUILD = '2026-10-31-source-v2.2';
+        const ATTRIBUTION_STORAGE_KEY = 'ttdbuy_creator_attribution_v2';
+        const ATTRIBUTION_TTL_MS = 24 * 60 * 60 * 1000;
+        const BIO_DESTINATION = 'https://linktr.ee/ttdbuy';
+        const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+        const SOURCE_FIELDS = ['creator_id', 'ref', 'utm_content', 'utm_campaign', 'utm_source'];
+        // 依本站已有短链约定：Campaign 的值就是博主编号，不是普通营销活动名。
+        const CAMPAIGN_CONTAINS_CREATOR_ID = true;
+        const CREATOR_ALIASES = Object.freeze({
+            // 如需使用别名，请登记真实对应关系，例如：'my_creator': 'kol001'
+            // 不要将 tiktok、always_on、profile_bio 等渠道或活动名登记为博主。
+        });
+        let activeAttribution = null;
+        let bridgeStatus = '未启用';
+
+
+
+
         // 使用号码本身生成 wa.me 链接，避免号码和跳转地址不一致。
         function buildAgent(raw) {
             if (!raw || typeof raw.number !== 'string' || typeof raw.agentId !== 'string') return null;
@@ -614,11 +655,200 @@
             return selected;
         }
 
-        function getCreatorId() {
+        function pageParams() {
+            try { return new URLSearchParams(window.location.search); }
+            catch (e) { return new URLSearchParams(); }
+        }
+
+        function debugEnabled() { return pageParams().get('debug') === '1'; }
+
+        function cleanCreatorToken(value) {
+            if (typeof value !== 'string') return '';
+            const text = value.trim();
+            // 不截断编号：超长或包含空格/换行/HTML 的输入一律不作为身份编号。
+            if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(text)) return '';
+            if (/^(?:null|undefined|unknown|none|direct)$/i.test(text)) return '';
+            return text;
+        }
+
+        function normalizeCreator(value, sourceKey) {
+            const explicitIdentity = sourceKey === 'creator_id' || sourceKey === 'ref';
+            // 入口模式把显式身份封装在标准 UTM 中；若导航页转发此标记，仍可明确识别。
+            // 已带 ttd_creator_ 的明确标记保持兼容，不把标记前缀写进实际编号。
+            if (!explicitIdentity && typeof value === 'string' && value.trim().startsWith('ttd_creator_')) {
+                return cleanCreatorToken(value.trim().slice('ttd_creator_'.length));
+            }
+            const token = cleanCreatorToken(value);
+            if (!token) return '';
+            const aliasKey = token.toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(CREATOR_ALIASES, aliasKey)) {
+                return cleanCreatorToken(CREATOR_ALIASES[aliasKey]);
+            }
+            if (explicitIdentity) return token;
+            // Campaign 是本站约定的博主字段，允许自定义编号，不再限定 K/kol 前缀。
+            if (sourceKey === 'utm_campaign' && CAMPAIGN_CONTAINS_CREATOR_ID) return token;
+            // 其余 UTM 仍只接受已约定的编号或登记别名，避免把 tiktok/profile_bio 当成博主。
+            return /^(?:kol[-_]?[0-9]+|k[-_]?[0-9]+)$/i.test(token) ? token : '';
+        }
+
+        function uniqueParam(params, key) {
+            const values = Array.from(new Set(params.getAll(key).map(v => v.trim()).filter(Boolean)));
+            // 重复且冲突的同名参数不猜测取哪一个。
+            return values.length === 1 ? values[0] : '';
+        }
+
+        function safeRemoveSource() {
+            try { localStorage.removeItem(ATTRIBUTION_STORAGE_KEY); } catch (e) {}
+        }
+
+        function validSourceRecord(record, now) {
+            return !!record && record.version === 2 &&
+                cleanCreatorToken(record.creatorId) === record.creatorId && !!record.creatorId &&
+                SOURCE_FIELDS.indexOf(record.sourceKey) !== -1 &&
+                Number.isFinite(record.capturedAt) && record.capturedAt >= 0 &&
+                record.capturedAt <= now && now - record.capturedAt < ATTRIBUTION_TTL_MS;
+        }
+
+        function readSourceRecord(now) {
+            const raw = safeGet(ATTRIBUTION_STORAGE_KEY);
+            if (!raw) return null;
             try {
-                const params = new URLSearchParams(window.location.search);
-                return (params.get('utm_campaign') || params.get('ref') || '').trim().slice(0, 120);
-            } catch (e) { return ''; }
+                const record = JSON.parse(raw);
+                if (validSourceRecord(record, now)) return record;
+            } catch (e) {}
+            safeRemoveSource();
+            return null;
+        }
+
+        function unknownSource(reason) {
+            return { creatorId: '', sourceKey: '', method: 'unknown', capturedAt: null,
+                stored: false, reason: reason || '本次没有收到来源，且没有有效缓存' };
+        }
+
+        function resolveAttribution() {
+            const params = pageParams();
+            const now = Date.now();
+            // 明确的 Linktree 回程只使用先前中转入口保存的来源。
+            // Linktree 可能把自己的按钮标题写成 Campaign，不能据此覆盖博主编号。
+            if (uniqueParam(params, 'from') === 'linktree') {
+                const saved = readSourceRecord(now);
+                if (saved && saved.entryMode === 'linktree') {
+                    return Object.assign({}, saved, { method: 'cache', stored: true,
+                        reason: 'Linktree 回程：恢复本浏览器的中转来源，未采用回程 UTM' });
+                }
+                return unknownSource('Linktree 回程没有有效的中转来源缓存；未按回程 UTM 推测博主');
+            }
+            // 显式身份优先，其次明确 Content 编号，然后读取本站 Campaign 博主编号。
+            for (const field of SOURCE_FIELDS) {
+                const id = normalizeCreator(uniqueParam(params, field), field);
+                if (!id) continue;
+                const record = {
+                    version: 2,
+                    creatorId: id,
+                    sourceKey: field,
+                    entryMode: uniqueParam(params, 'via') === 'linktree' ? 'linktree' : 'direct',
+                    // 收到显式有效来源时开始新期限；无参回访只读缓存，绝不续期。
+                    capturedAt: now
+                };
+                const stored = safeSet(ATTRIBUTION_STORAGE_KEY, JSON.stringify(record));
+                return Object.assign({}, record, { method: 'url', stored: stored, reason: '' });
+            }
+            // 带来新线索却无法确认时，不把旧缓存冒充这次来源。
+            const hasNewHints = ['creator_id', 'ref'].concat(UTM_FIELDS).some(key => params.has(key));
+            if (hasNewHints) {
+                safeRemoveSource();
+                return unknownSource('收到来源/UTM 参数，但没有合法博主编号；未套用旧来源');
+            }
+            const saved = readSourceRecord(now);
+            if (saved) return Object.assign({}, saved, { method: 'cache', stored: true, reason: '' });
+            return unknownSource();
+        }
+
+        function getCreatorId() {
+            return activeAttribution ? activeAttribution.creatorId : '';
+        }
+
+        function expireCachedSourceIfNeeded() {
+            if (activeAttribution && activeAttribution.method === 'cache' &&
+                !validSourceRecord(activeAttribution, Date.now())) {
+                activeAttribution = unknownSource('来源缓存已到期');
+                // 不删除其他标签页可能刚刚写入的新来源。
+                readSourceRecord(Date.now());
+                renderAgent(activeAgent || STATIC_FALLBACK_AGENT);
+            }
+        }
+
+        function renderSourceDebug() {
+            const panel = document.getElementById('sourceDebug');
+            const text = document.getElementById('sourceDebugText');
+            if (!panel || !text) return;
+            panel.hidden = !debugEnabled();
+            if (panel.hidden) return;
+            const params = pageParams();
+            const seen = [];
+            ['creator_id', 'ref'].concat(UTM_FIELDS).forEach(key => {
+                if (params.has(key)) seen.push(key + '=' + params.getAll(key).join(' / ').slice(0,180));
+            });
+            const s = activeAttribution || unknownSource();
+            const method = {url: '当前 URL', cache: '同一浏览器的有效缓存', unknown: '未知'}[s.method];
+            text.textContent = [
+                '版本：' + SOURCE_BUILD,
+                '收到的来源参数：' + (seen.join(', ') || '无'),
+                '博主编号：' + (s.creatorId || 'unknown'),
+                '取值方式：' + method,
+                '采用字段：' + (s.sourceKey || '无'),
+                '来源入口：' + (s.entryMode === 'linktree' ? 'Linktree 中转入口' : s.creatorId ? '直接来源' : '未知'),
+                '已保存来源：' + (s.stored ? '是（24 小时）' : '否'),
+                '到期时间：' + (s.capturedAt !== null ? new Date(s.capturedAt + ATTRIBUTION_TTL_MS).toISOString() : '无'),
+                '导航入口模式：' + bridgeStatus,
+                '分配客服：' + (activeAgent ? activeAgent.agentId : '未初始化'),
+                '说明：' + (s.reason || '来源已识别'),
+                'WhatsApp：' + activeWhatsappUrl,
+                '缓存只是入口线索，不是已经确认的客户首次来源。'
+            ].join('\n');
+        }
+
+        function maybeOpenLinktree() {
+            const params = pageParams();
+            if (uniqueParam(params, 'via') !== 'linktree') return false;
+            const s = activeAttribution;
+            if (!s || s.method !== 'url' || !s.creatorId) {
+                bridgeStatus = '未跳转：入口没有合法来源，保留当前客服页';
+                renderSourceDebug();
+                return false;
+            }
+            const saved = readSourceRecord(Date.now());
+            if (!s.stored || !saved || saved.entryMode !== 'linktree' || saved.creatorId !== s.creatorId || saved.capturedAt !== s.capturedAt) {
+                bridgeStatus = '未跳转：本地存储不可用，当前页仍可带来源联系客服';
+                renderSourceDebug();
+                return false;
+            }
+            if (debugEnabled()) {
+                bridgeStatus = '已就绪；debug=1 暂停跳转，移除 debug 后进入 Linktree';
+                renderSourceDebug();
+                return false;
+            }
+            try {
+                // 固定目的地，不接受 URL 中传来的任意跳转地址。
+                const target = new URL(BIO_DESTINATION);
+                UTM_FIELDS.forEach(key => {
+                    const value = uniqueParam(params, key);
+                    if (value && value.length <= 160 && !/[\u0000-\u001f\u007f]/.test(value)) {
+                        target.searchParams.set(key, value);
+                    }
+                });
+                // 即使入口只带 ref=自定义编号、活动名是普通文本，转发恢复后也能识别来源。
+                target.searchParams.set('utm_content', 'ttd_creator_' + s.creatorId);
+                bridgeStatus = '来源已保存，正在进入 Linktree';
+                renderSourceDebug();
+                // 只在显式 via=linktree 模式下导航；普通客服页不会修改地址栏或重定向。
+                window.location.replace(target.toString());
+                return true;
+            } catch (e) {
+                bridgeStatus = '导航失败，当前页仍可联系客服';
+                renderSourceDebug();
+                return false;
+            }
         }
 
         let activeAgent = null;
@@ -647,6 +877,7 @@
                 }
             }
             linkEl.href = activeWhatsappUrl;
+            renderSourceDebug();
         }
 
         function changeLanguage(lang) {
@@ -704,6 +935,8 @@
         }
 
         function initPage() {
+            try { activeAttribution = resolveAttribution(); }
+            catch (e) { activeAttribution = unknownSource('来源初始化异常，客服功能仍可使用'); }
             // 无论随机池出错还是缓存异常，都保留可用的备用号码。
             try { renderAgent(getAssignedAgent()); }
             catch (e) {
@@ -718,10 +951,13 @@
             const link = document.getElementById('whatsappLink');
             if (link) {
                 link.addEventListener('click', function() {
+                    expireCachedSourceIfNeeded();
                     try {
                         if (typeof window.gtag === 'function') {
                             window.gtag('event', 'whatsapp_click', {
                                 creator_id: activeCreatorId || 'unknown',
+                                attribution_method: activeAttribution ? activeAttribution.method : 'unknown',
+                                source_parameter: activeAttribution ? activeAttribution.sourceKey : '',
                                 agent_id: activeAgent ? activeAgent.agentId : 'agent-01',
                                 whatsapp_number: activeAgent ? activeAgent.number : STATIC_FALLBACK_AGENT.number,
                                 whatsapp_link: activeWhatsappUrl
@@ -751,6 +987,7 @@
                     if (selector && !selector.contains(e.target)) languageDropdown.classList.remove('active');
                 });
             }
+            maybeOpenLinktree();
         }
 
         // 脚本位于 body 底部，DOM 已就绪，立即分配；减少默认备用号码的短暂显示。
